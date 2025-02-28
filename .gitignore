@@ -1,0 +1,14 @@
+# Ignore virtual environmen  named the env epic. prolly not best practices
+epic/
+venv/
+
+# Ignore compiled Python files
+__pycache__/
+
+# Ignore audio recordings and output files
+data/
+output/
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db

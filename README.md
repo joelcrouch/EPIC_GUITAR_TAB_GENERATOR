@@ -41,17 +41,6 @@ On macOS/Linux:
     source env/bin/activate
 ```
 
-Activate the environment:
-
-On Windows:
-```bash
-.\env\Scripts\activate
-```
-
-On macOS/Linux:
-```bash
-    source env/bin/activate
-```
 
 2. Install the required dependencies
 

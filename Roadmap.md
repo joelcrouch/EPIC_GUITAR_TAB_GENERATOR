@@ -124,7 +124,7 @@ Week 1:
     Day 3-4: Implement pitch detection using Librosa or Aubio.
     Day 5-6: Map detected frequencies to guitar notes and display them.
 
-Week 2: 4. Day 7-8: Implement tab generation logic and display in the UI. 5. Day 9: Set up database and save generated tab. 6. Day 10: Testing and debugging, including unit tests and full workflow testing.
+Week 2: 4. Day 7-8: Implement tab generation logic and display in the UI. 5. Day 9: Set up database and save generated tab. 6. Day 10: Testing and debugging, including unit tests and full workflow testing.(kinda done in situ, but i i will leave this here for now, b/c i might get lazy and do them last)
 
 Basic testing:
 Summary of Tests:
@@ -180,4 +180,64 @@ bash
 touch requirements.txt
 ```
 Open it up and add 'pytest(unit testing), pyaudio(for recording audio), wave (for saving .wav files).  
+
+Ok. fast forward.  I made the virtual env, (.env) activated it and ran pip install -r requirements.txt, and got this error: 
+
+```
+bash 
+  (some other output that worked)...
+  Building wheel for pyaudio (pyproject.toml) ... error
+  error: subprocess-exited-with-error
+  
+  × Building wheel for pyaudio (pyproject.toml) did not run successfully.
+  │ exit code: 1
+  ╰─> [15 lines of output]
+      running bdist_wheel
+      running build
+      running build_py
+      creating build/lib.linux-x86_64-cpython-312/pyaudio
+      copying src/pyaudio/__init__.py -> build/lib.linux-x86_64-cpython-312/pyaudio
+      running build_ext
+      building 'pyaudio._portaudio' extension
+      creating build/temp.linux-x86_64-cpython-312/src/pyaudio
+      x86_64-linux-gnu-gcc -fno-strict-overflow -Wsign-compare -DNDEBUG -g -O2 -Wall -fPIC -I/usr/local/include -I/usr/include -I/home/joel/epic/env/include -I/usr/include/python3.12 -c src/pyaudio/device_api.c -o build/temp.linux-x86_64-cpython-312/src/pyaudio/device_api.o
+      In file included from src/pyaudio/device_api.c:1:
+      src/pyaudio/device_api.h:7:10: fatal error: Python.h: No such file or directory
+          7 | #include "Python.h"
+            |          ^~~~~~~~~~
+      compilation terminated.
+      error: command '/usr/bin/x86_64-linux-gnu-gcc' failed with exit code 1
+      [end of output]
+  
+  note: This error originates from a subprocess, and is likely not a problem with pip.
+  ERROR: Failed building wheel for pyaudio
+Failed to build pyaudio
+ERROR: Could not build wheels for pyaudio, which is required to install pyproject.toml-based projects
+
+```
+
+So after bashing around with pyaudio documentation, i think we need some dependencies:
+
+```
+bash
+sudo apt-get update
+sudo apt-get install python3-dev portaudio19-dev libsndfile1
+Dont do this:  It is in req.txt. pip install pyaudio (reinstall!!, maybe optional, who knows)
+
+```
+
+Err. You are installing these system wide. Dont forget to deactivate and reactivate the .env.
+
+OK. Now when you run source env\bin\activate and python3 install -r requirements.txt, it should work.  (FYI: I am working on Ubuntu 24.04, you can adapt these commands to windows, arch, centos, bsd, whatever you want.)
+Check it with this : 
+
+```
+bash
+
+python3 -c "import pyaudio; print(pyaudio.__version__)"
+
+```
+
+Finally, lets write some code!
+OH wait. go ahead and investigate the docs here: https://pypi.org/project/PyAudio/  and here: https://docs.python.org/3/library/wave.html   They are pretty straightforward and you can almost use boilerplate code from them and just adapt it for your needs. Great.
 

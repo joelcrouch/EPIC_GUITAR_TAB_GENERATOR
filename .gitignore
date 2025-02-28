@@ -1,5 +1,5 @@
 # Ignore virtual environmen  named the env epic. prolly not best practices
-epic/
+env/
 venv/
 
 # Ignore compiled Python files

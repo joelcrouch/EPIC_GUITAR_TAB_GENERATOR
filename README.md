@@ -10,6 +10,10 @@ A Python-based desktop application for recording guitar audio, detecting the pit
 - **Tab Generation**: Converts the detected notes into a guitar tab format.
 - **UI**: Provides a basic interface to interact with the app and control the recording process.
 
+## Screenshots
+
+(add these when its running)
+
 ## Tech Stack
 
 - **Python**: Main language for development.
@@ -30,59 +34,104 @@ Create a virtual environment for the project to keep dependencies isolated:
 ```bash
 python3 -m venv env
 ```
+
 Activate the environment:
 
 On Windows:
+
 ```bash
 .\env\Scripts\activate
 ```
+
 On macOS/Linux:
+
 ```bash
     source env/bin/activate
 ```
 
-
-2. Install the required dependencies
+### 2. Install the required dependencies
 
 Run the following command to install the required libraries from requirements.txt:
+
 ```bash
 pip install -r requirements.txt
 ```
 
 If you don't have the requirements.txt file yet, you can create one by running:
+
 ```bash
 pip freeze > requirements.txt
 ```
+
 This will list the libraries you’ve installed into a requirements.txt file.
 
-3. Additional setup for PyAudio
+### 3. Additional setup for PyAudio (if needed)
 
 If you encounter issues with PyAudio (especially on Linux), ensure you have the necessary dependencies installed:
 
     On Ubuntu:
+
 ```bash
     sudo apt-get install portaudio19-dev
     sudo apt-get install python3-pyaudio
 ```
-TODO:  Running the Application  
 
+    On MacOs
+
+```bash
+    brew install portaudio
+    pip install pyaudio
+```
+
+## Using the app
+
+    1.Start the application:
+    ```bash
+    python main.py
+    ```
+    2. Record
+
+        -Connect your guitar to your computer via an audio interface or use a microphone positioned near your guitar
+
+        - Click the "Record" button to start recording
+        - Play some notes or a melody on your guitar
+        - Click "Stop" when you're done
+    3. Generate tablature
+        -Click the "Analyze" button to process the recording
+        -The application will detect the notes and display them in tab format
+    4. save the tab
+    - Click the "Save Tab" button to save the generated tab as a text file
+    - The tab file can be opened in any text editor
+
+### How It Works
+
+The application records audio through your computer's microphone using PyAudio
+The recorded audio is saved as a .wav file
+Librosa (a Python library for audio analysis) is used to detect the pitches in the recording
+The detected frequencies are mapped to the closest guitar notes
+The notes are positioned on the appropriate strings and frets to create a readable guitar tablature
+The resulting tab is displayed in the application and can be saved for future reference
+
+TODO: Running the Application
 
 Once the environment is set up and dependencies are installed, you can start the application.
 
     A. Record audio: Press the "Record" button to capture audio from your guitar.
-    
+
     B. Analyze pitch: Once the recording is done, the app will detect the frequencies of the notes.
-    
+
     C. Generate guitar tab: The detected frequencies are then mapped to corresponding guitar notes and displayed in tablature format.
 
 Testing
 
 Unit tests are included to validate the core functionality of the app. You can run the tests using pytest.
 Running tests:
+
 ```bash
 pytest -s
 ```
-I suggest using -s flag just to see what is happening with output.  It instills more trust if i can see the steps as the app steps through its functionality.  A little bit of 'insert print statement' debugging, but confidence is higher.
+
+I suggest using -s flag just to see what is happening with output. It instills more trust if i can see the steps as the app steps through its functionality. A little bit of 'insert print statement' debugging, but confidence is higher.
 
 Example tests:
 
@@ -92,7 +141,6 @@ Example tests:
 Folder Structure
 
 Here's how the project files are organized:
-
 
 ```bash
 guitar-tab-generator/
@@ -119,8 +167,25 @@ guitar-tab-generator/
 
 ```
 
+### Limitations and Known Issues
 
+The pitch detection works best with clean, single-note guitar playing
+Fast or complex passages may not be accurately transcribed
+Background noise can affect the quality of note detection
+Currently only supports standard guitar tuning (E A D G B E)
 
-Contributing
+### Future Enhancements
+
+Support for different guitar tunings
+Improved detection of chords and multiple notes played simultaneously
+Rhythm detection to include timing information in the tab
+Visual representation of the detected notes on a guitar fretboard
+Export to Guitar Pro or other tab formats
+
+### Contributing
 
 Feel free to fork the repository, create issues, and submit pull requests. Contributions are welcome!
+
+### License
+
+This project is licensed under the MIT License - see the LICENSE file for details. (todo)

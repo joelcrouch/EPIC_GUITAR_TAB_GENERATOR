@@ -1,14 +1,39 @@
-# Ignore virtual environmen  named the env epic. prolly not best practices
+# Environments
 env/
 venv/
+ENV/
+env.bak/
+venv.bak/
+.env
+.venv
 
-# Ignore compiled Python files
+# Python bytecode
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 
-# Ignore audio recordings and output files
-data/
-output/
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
 
-# Ignore OS-specific files
+# Data and output files
+data/*.wav
+output/*.txt
+test_data/*.wav
+test_output/*.txt
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific files
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log

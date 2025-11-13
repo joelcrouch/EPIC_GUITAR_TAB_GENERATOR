@@ -1,0 +1,16 @@
+name: guitar-tab
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pyaudio
+  - librosa
+  - numpy
+  - scipy
+  - soundfile
+  - numba
+  - pytest
+  - pip
+  - pip:
+    - pytest-timeout

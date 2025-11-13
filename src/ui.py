@@ -1,205 +1,320 @@
 """
-User interface for the Guitar Tab Generator application
+User interface module for the Guitar Tab Generator.
+Provides a tkinter-based GUI for recording and analyzing guitar audio.
 """
-import os
-import threading
 import tkinter as tk
-from tkinter import scrolledtext, filedialog, messagebox
+from tkinter import ttk, scrolledtext, messagebox, filedialog
+import threading
 import time
+import os
 
 from src.record_audio import AudioRecorder
 from src.analyze_audio import AudioAnalyzer
 from src.generate_tab import TabGenerator
 
-class TabGeneratorApp:
+
+class GuitarTabApp:
     def __init__(self, root):
-        """Initialize the application UI"""
+        """Initialize the Guitar Tab Generator application."""
         self.root = root
-        self.recorder = AudioRecorder(output_dir="data")
+        self.root.title("Guitar Tab Generator")
+        self.root.geometry("800x600")
+        
+        # Initialize components
+        self.recorder = AudioRecorder()
         self.analyzer = AudioAnalyzer()
         self.tab_generator = TabGenerator()
         
-        # Create output directories if they don't exist
-        if not os.path.exists("data"):
-            os.makedirs("data")
-        if not os.path.exists("output"):
-            os.makedirs("output")
-        
-        # Recording state
+        # State variables
+        self.recording_thread = None
         self.is_recording = False
-        self.record_thread = None
-        self.current_audio_file = None
+        self.current_recording_file = None
+        self.current_notes = None
         
-        # Create UI elements
-        self._create_widgets()
+        # Create UI
+        self.create_widgets()
         
-    def _create_widgets(self):
-        """Create and layout all UI widgets"""
-        # Main frame with padding
-        main_frame = tk.Frame(self.root, padx=10, pady=10)
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        # Bind cleanup on window close
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
+    def create_widgets(self):
+        """Create and layout all UI widgets."""
         # Title
-        title_label = tk.Label(main_frame, text="Guitar Tab Generator", font=("Arial", 16, "bold"))
-        title_label.pack(pady=(0, 10))
+        title_label = tk.Label(
+            self.root,
+            text="🎸 Guitar Tab Generator",
+            font=("Arial", 20, "bold"),
+            pady=10
+        )
+        title_label.pack()
         
-        # Control frame (buttons)
-        control_frame = tk.Frame(main_frame)
-        control_frame.pack(fill=tk.X, pady=5)
+        # Control Frame
+        control_frame = ttk.Frame(self.root, padding="10")
+        control_frame.pack(fill=tk.X)
         
         # Recording controls
-        self.record_button = tk.Button(control_frame, text="Record", command=self._toggle_recording, bg="#ff7f7f")
+        self.record_button = ttk.Button(
+            control_frame,
+            text="🎙️ Record",
+            command=self.toggle_recording,
+            width=15
+        )
         self.record_button.pack(side=tk.LEFT, padx=5)
         
-        self.analyze_button = tk.Button(control_frame, text="Analyze", command=self._analyze_audio, state=tk.DISABLED)
+        self.analyze_button = ttk.Button(
+            control_frame,
+            text="🔍 Analyze",
+            command=self.analyze_recording,
+            state=tk.DISABLED,
+            width=15
+        )
         self.analyze_button.pack(side=tk.LEFT, padx=5)
         
-        # Load file button
-        self.load_button = tk.Button(control_frame, text="Load Audio File", command=self._load_audio_file)
-        self.load_button.pack(side=tk.LEFT, padx=5)
-        
-        # Save tab button
-        self.save_button = tk.Button(control_frame, text="Save Tab", command=self._save_tab, state=tk.DISABLED)
+        self.save_button = ttk.Button(
+            control_frame,
+            text="💾 Save Tab",
+            command=self.save_tab,
+            state=tk.DISABLED,
+            width=15
+        )
         self.save_button.pack(side=tk.LEFT, padx=5)
         
+        self.clear_button = ttk.Button(
+            control_frame,
+            text="🗑️ Clear",
+            command=self.clear_output,
+            width=15
+        )
+        self.clear_button.pack(side=tk.LEFT, padx=5)
+        
         # Status label
-        self.status_var = tk.StringVar()
-        self.status_var.set("Ready")
-        status_label = tk.Label(main_frame, textvariable=self.status_var, bd=1, relief=tk.SUNKEN, anchor=tk.W)
-        status_label.pack(fill=tk.X, pady=(5, 0))
+        self.status_label = tk.Label(
+            self.root,
+            text="Ready to record",
+            font=("Arial", 10),
+            fg="green",
+            pady=5
+        )
+        self.status_label.pack()
         
-        # Tab display area
-        tab_frame = tk.LabelFrame(main_frame, text="Guitar Tab")
-        tab_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        # Recording time label
+        self.time_label = tk.Label(
+            self.root,
+            text="Duration: 0.0s",
+            font=("Arial", 9),
+            fg="gray"
+        )
+        self.time_label.pack()
         
-        self.tab_text = scrolledtext.ScrolledText(tab_frame, wrap=tk.NONE, font=("Courier", 12))
-        self.tab_text.pack(fill=tk.BOTH, expand=True)
+        # Separator
+        ttk.Separator(self.root, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=10)
         
-        # Set default tab display
-        default_tab = self.tab_generator._format_tab(self.tab_generator.empty_tab)
-        self.tab_text.insert(tk.END, default_tab)
-        self.tab_text.config(state=tk.DISABLED)
+        # Output area
+        output_label = tk.Label(
+            self.root,
+            text="Output",
+            font=("Arial", 12, "bold")
+        )
+        output_label.pack(anchor=tk.W, padx=10)
         
-        # Notes display area
-        notes_frame = tk.LabelFrame(main_frame, text="Detected Notes")
-        notes_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        # Scrolled text for output
+        self.output_text = scrolledtext.ScrolledText(
+            self.root,
+            wrap=tk.NONE,
+            font=("Courier", 9),
+            height=20
+        )
+        self.output_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        self.notes_text = scrolledtext.ScrolledText(notes_frame, height=5, wrap=tk.WORD)
-        self.notes_text.pack(fill=tk.BOTH, expand=True)
-        self.notes_text.config(state=tk.DISABLED)
-    
-    def _toggle_recording(self):
-        """Toggle recording on/off"""
+        # Add horizontal scrollbar
+        h_scrollbar = ttk.Scrollbar(self.output_text, orient=tk.HORIZONTAL)
+        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        self.output_text.config(xscrollcommand=h_scrollbar.set)
+        h_scrollbar.config(command=self.output_text.xview)
+        
+    def toggle_recording(self):
+        """Start or stop audio recording."""
         if not self.is_recording:
-            # Start recording
-            self.is_recording = True
-            self.record_button.config(text="Stop", bg="#7fff7f")
-            self.load_button.config(state=tk.DISABLED)
-            self.analyze_button.config(state=tk.DISABLED)
-            self.status_var.set("Recording...")
-            
-            # Clear previous results
-            self.tab_text.config(state=tk.NORMAL)
-            self.tab_text.delete(1.0, tk.END)
-            self.tab_text.insert(tk.END, self.tab_generator._format_tab(self.tab_generator.empty_tab))
-            self.tab_text.config(state=tk.DISABLED)
-            
-            self.notes_text.config(state=tk.NORMAL)
-            self.notes_text.delete(1.0, tk.END)
-            self.notes_text.config(state=tk.DISABLED)
-            
-            # Start recording in a separate thread
-            self.record_thread = threading.Thread(target=self._record_audio)
-            self.record_thread.daemon = True
-            self.record_thread.start()
+            self.start_recording()
         else:
-            # Stop recording
-            self.is_recording = False
-            self.recorder.stop_recording()
-            self.record_button.config(text="Record", bg="#ff7f7f")
-            self.analyze_button.config(state=tk.NORMAL)
-            self.load_button.config(state=tk.NORMAL)
-            self.status_var.set("Recording stopped. Ready to analyze.")
-    
-    def _record_audio(self):
-        """Record audio in a separate thread"""
+            self.stop_recording()
+            
+    def start_recording(self):
+        """Start recording audio in a separate thread."""
+        self.is_recording = True
         self.recorder.start_recording()
+        
+        # Update UI
+        self.record_button.config(text="⏹️ Stop")
+        self.status_label.config(text="Recording... Play your guitar!", fg="red")
+        self.analyze_button.config(state=tk.DISABLED)
+        self.save_button.config(state=tk.DISABLED)
+        
+        # Start recording thread
+        self.recording_thread = threading.Thread(target=self.record_loop, daemon=True)
+        self.recording_thread.start()
+        
+        # Start time update
+        self.update_recording_time()
+        
+    def record_loop(self):
+        """Continuously record audio chunks while recording is active."""
         while self.is_recording:
-            self.recorder.record_frame()
-            time.sleep(0.01)  # Small delay to prevent high CPU usage
+            self.recorder.record_chunk()
+            time.sleep(0.01)  # Small delay to prevent CPU hogging
+            
+    def update_recording_time(self):
+        """Update the recording time display."""
+        if self.is_recording:
+            duration = self.recorder.get_recording_duration()
+            self.time_label.config(text=f"Duration: {duration:.1f}s")
+            self.root.after(100, self.update_recording_time)
+            
+    def stop_recording(self):
+        """Stop recording and save the audio file."""
+        self.is_recording = False
+        self.recorder.stop_recording()
         
-        # When recording is stopped
-        self.current_audio_file = self.recorder.filename
-    
-    def _analyze_audio(self):
-        """Analyze the recorded audio and generate tab"""
-        if not self.current_audio_file:
-            messagebox.showwarning("Warning", "No audio file to analyze.")
+        # Update UI
+        self.record_button.config(text="🎙️ Record")
+        self.status_label.config(text="Recording stopped. Click Analyze to generate tab.", fg="blue")
+        
+        # Save the recording
+        self.current_recording_file = self.recorder.save_recording()
+        
+        if self.current_recording_file:
+            duration = self.recorder.get_recording_duration()
+            self.append_output(f"Recording saved: {self.current_recording_file}\n")
+            self.append_output(f"Duration: {duration:.2f} seconds\n\n")
+            self.analyze_button.config(state=tk.NORMAL)
+        else:
+            self.status_label.config(text="Error saving recording", fg="red")
+            
+    def analyze_recording(self):
+        """Analyze the recorded audio and generate tablature."""
+        if not self.current_recording_file or not os.path.exists(self.current_recording_file):
+            messagebox.showerror("Error", "No recording found to analyze!")
             return
-        
-        self.status_var.set(f"Analyzing audio file: {os.path.basename(self.current_audio_file)}...")
+            
+        # Update UI
+        self.status_label.config(text="Analyzing audio... Please wait.", fg="orange")
+        self.analyze_button.config(state=tk.DISABLED)
         self.root.update()
         
         try:
-            # Analyze audio
-            detected_notes = self.analyzer.analyze_audio_file(self.current_audio_file)
+            # Analyze in a separate thread to keep UI responsive
+            analysis_thread = threading.Thread(target=self._do_analysis, daemon=True)
+            analysis_thread.start()
             
-            # Display detected notes
-            self.notes_text.config(state=tk.NORMAL)
-            self.notes_text.delete(1.0, tk.END)
-            if detected_notes:
-                for time, note, string, fret in detected_notes:
-                    position_info = f"String {string}, Fret {fret}" if string and fret else "Unknown position"
-                    self.notes_text.insert(tk.END, f"Time: {time:.2f}s, Note: {note}, {position_info}\n")
-            else:
-                self.notes_text.insert(tk.END, "No notes detected. Try recording again with clearer audio.")
-            self.notes_text.config(state=tk.DISABLED)
-            
-            # Generate and display tab
-            tab_text = self.tab_generator.generate_tab(detected_notes)
-            self.tab_text.config(state=tk.NORMAL)
-            self.tab_text.delete(1.0, tk.END)
-            self.tab_text.insert(tk.END, tab_text)
-            self.tab_text.config(state=tk.DISABLED)
-            
-            # Enable save button
-            self.save_button.config(state=tk.NORMAL)
-            
-            self.status_var.set("Analysis complete. Tab generated.")
         except Exception as e:
-            messagebox.showerror("Error", f"An error occurred during analysis: {str(e)}")
-            self.status_var.set("Analysis failed.")
-    
-    def _load_audio_file(self):
-        """Load an existing audio file for analysis"""
-        file_path = filedialog.askopenfilename(
-            title="Select Audio File",
-            filetypes=(("WAV files", "*.wav"), ("All files", "*.*"))
-        )
-        
-        if file_path:
-            self.current_audio_file = file_path
-            self.status_var.set(f"Audio file loaded: {os.path.basename(file_path)}")
+            messagebox.showerror("Error", f"Analysis failed: {str(e)}")
+            self.status_label.config(text="Analysis failed", fg="red")
             self.analyze_button.config(state=tk.NORMAL)
-    
-    def _save_tab(self):
-        """Save the generated tab to a text file"""
-        if self.tab_text.get(1.0, tk.END).strip() == "":
-            messagebox.showwarning("Warning", "No tab to save.")
+            
+    def _do_analysis(self):
+        """Perform the actual analysis (runs in separate thread)."""
+        try:
+            self.append_output("Starting analysis...\n")
+            
+            # Analyze recording
+            self.current_notes = self.analyzer.analyze_recording(self.current_recording_file)
+            
+            if not self.current_notes:
+                self.root.after(0, lambda: self.status_label.config(
+                    text="No notes detected. Try recording again with clearer audio.",
+                    fg="orange"
+                ))
+                self.append_output("\nNo notes detected. Tips:\n")
+                self.append_output("- Play single notes clearly\n")
+                self.append_output("- Reduce background noise\n")
+                self.append_output("- Play louder or closer to microphone\n\n")
+                return
+                
+            # Generate tab
+            tab = self.tab_generator.generate_tab(self.current_notes)
+            detailed_tab = self.tab_generator.generate_detailed_tab(self.current_notes)
+            
+            # Display results
+            self.append_output("\n" + "="*70 + "\n")
+            self.append_output("GUITAR TABLATURE\n")
+            self.append_output("="*70 + "\n\n")
+            self.append_output(tab)
+            self.append_output("\n\n")
+            self.append_output(detailed_tab)
+            self.append_output("\n")
+            
+            # Update UI
+            self.root.after(0, lambda: self.status_label.config(
+                text=f"Analysis complete! Found {len(self.current_notes)} notes.",
+                fg="green"
+            ))
+            self.root.after(0, lambda: self.save_button.config(state=tk.NORMAL))
+            self.root.after(0, lambda: self.analyze_button.config(state=tk.NORMAL))
+            
+        except Exception as e:
+            self.append_output(f"\nError during analysis: {str(e)}\n")
+            self.root.after(0, lambda: self.status_label.config(
+                text="Analysis failed",
+                fg="red"
+            ))
+            self.root.after(0, lambda: self.analyze_button.config(state=tk.NORMAL))
+            
+    def save_tab(self):
+        """Save the generated tablature to a file."""
+        if not self.current_notes:
+            messagebox.showerror("Error", "No tab to save! Analyze a recording first.")
             return
             
-        file_path = filedialog.asksaveasfilename(
-            title="Save Tab As",
+        # Ask user for filename
+        filename = filedialog.asksaveasfilename(
             defaultextension=".txt",
-            filetypes=(("Text files", "*.txt"), ("All files", "*.*")),
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
             initialdir="output"
         )
         
-        if file_path:
-            tab_text = self.tab_text.get(1.0, tk.END)
+        if filename:
             try:
-                with open(file_path, 'w') as file:
-                    file.write(tab_text)
-                self.status_var.set(f"Tab saved to {os.path.basename(file_path)}")
+                # Get tab content
+                tab = self.tab_generator.generate_tab(self.current_notes)
+                detailed_tab = self.tab_generator.generate_detailed_tab(self.current_notes)
+                
+                full_content = f"{tab}\n\n{detailed_tab}"
+                
+                # Save to file
+                with open(filename, 'w') as f:
+                    f.write(full_content)
+                    
+                messagebox.showinfo("Success", f"Tab saved to:\n{filename}")
+                self.status_label.config(text="Tab saved successfully!", fg="green")
+                
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save tab: {str(e)}")
+                
+    def clear_output(self):
+        """Clear the output text area."""
+        self.output_text.delete(1.0, tk.END)
+        self.status_label.config(text="Output cleared", fg="gray")
+        
+    def append_output(self, text):
+        """Append text to the output area."""
+        self.output_text.insert(tk.END, text)
+        self.output_text.see(tk.END)
+        self.root.update()
+        
+    def on_closing(self):
+        """Clean up resources when closing the application."""
+        if self.is_recording:
+            self.stop_recording()
+        self.recorder.cleanup()
+        self.root.destroy()
+
+
+def main():
+    """Main entry point for the application."""
+    root = tk.Tk()
+    app = GuitarTabApp(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

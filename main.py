@@ -1,8 +1,10 @@
-import tkinter as tk
-from src.ui import TabGeneratorApp
+"""
+Main entry point for the Guitar Tab Generator application.
+"""
+from src.ui import main
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    root.title("Guitar Tab Generator")
-    app = TabGeneratorApp(root)
-    root.mainloop()
+    print("Starting Guitar Tab Generator...")
+    print("Make sure your microphone/audio interface is connected!")
+    print("-" * 50)
+    main()

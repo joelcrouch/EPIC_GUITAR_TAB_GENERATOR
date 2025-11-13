@@ -1,166 +1,196 @@
 """
-Module for analyzing audio and detecting guitar notes
+Audio analysis module for the Guitar Tab Generator.
+Detects pitches from recorded audio and maps them to guitar notes.
 """
-import numpy as np
 import librosa
-import os
+import numpy as np
 
 class AudioAnalyzer:
-    def __init__(self):
-        """Initialize the audio analyzer with guitar-specific settings"""
-        # Standard guitar tuning frequencies for open strings (E2, A2, D3, G3, B3, E4)
-        self.guitar_open_strings = {
-            'E2': 82.41,
-            'A2': 110.00,
-            'D3': 146.83,
-            'G3': 196.00,
-            'B3': 246.94,
-            'E4': 329.63
-        }
-        
-        # Define the frequency range for guitar notes (from E2 to E6)
-        self.min_freq = 75  # Just below E2
-        self.max_freq = 1400  # Above E6
-        
-        # Note frequencies for mapping (all notes across the fretboard)
-        self.note_frequencies = self._generate_note_frequencies()
-        
-    def _generate_note_frequencies(self):
-        """Generate a dictionary of note frequencies across the guitar range"""
-        # Base frequencies for the chromatic scale starting at C0
-        base_notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-        base_freq = 16.35  # C0
-        
-        notes_dict = {}
-        
-        # Generate frequencies for all notes in our range
-        for octave in range(2, 7):  # From octave 2 to 6 (covers guitar range)
-            for i, note in enumerate(base_notes):
-                freq = base_freq * (2 ** (octave + i/12))
-                if self.min_freq <= freq <= self.max_freq:
-                    note_name = f"{note}{octave}"
-                    notes_dict[note_name] = freq
-                    
-        return notes_dict
+    # Standard guitar tuning (from lowest to highest string)
+    STANDARD_TUNING = {
+        'E2': 82.41,   # Low E string (6th string)
+        'A2': 110.00,  # A string (5th string)
+        'D3': 146.83,  # D string (4th string)
+        'G3': 196.00,  # G string (3rd string)
+        'B3': 246.94,  # B string (2nd string)
+        'E4': 329.63   # High E string (1st string)
+    }
     
-    def analyze_audio_file(self, file_path):
+    # Note names
+    NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    
+    def __init__(self, hop_length=512, frame_length=2048):
         """
-        Analyze an audio file to detect pitches and convert to guitar notes
+        Initialize the audio analyzer.
         
-        Returns a list of (time, note, string, fret) tuples
+        Args:
+            hop_length: Number of samples between successive frames
+            frame_length: Length of the windowed signal for FFT
         """
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Audio file not found: {file_path}")
+        self.hop_length = hop_length
+        self.frame_length = frame_length
         
-        # Load the audio file with librosa
-        y, sr = librosa.load(file_path, sr=None)
+    def load_audio(self, filepath):
+        """
+        Load an audio file.
         
-        # Use librosa's pitch tracking
-        pitches, magnitudes = librosa.piptrack(y=y, sr=sr)
-        
-        # Extract the strongest pitches over time
-        times = librosa.times_like(pitches)
-        detected_notes = []
-        
-        # Process each frame
-        for t, time in enumerate(times):
-            # Only process frames every 0.1 seconds to avoid excessive notes
-            if t % int(sr/1024/10) != 0:
-                continue
-                
-            index = magnitudes[:, t].argmax()
-            pitch = pitches[index, t]
+        Args:
+            filepath: Path to the audio file
             
-            # Only proceed if the pitch is strong enough and in our frequency range
-            if pitch > 0 and self.min_freq <= pitch <= self.max_freq:
-                # Map to the closest guitar note
-                note, string, fret = self._map_to_guitar_note(pitch)
-                if note:
-                    detected_notes.append((time, note, string, fret))
-        
-        return detected_notes
-    
-    def analyze_audio_data(self, audio_data, sample_rate):
+        Returns:
+            Tuple of (audio_data, sample_rate)
         """
-        Analyze audio data directly from a numpy array
+        print(f"Loading audio file: {filepath}")
+        y, sr = librosa.load(filepath, sr=None)
+        print(f"Audio loaded: {len(y)} samples at {sr} Hz ({len(y)/sr:.2f} seconds)")
+        return y, sr
         
-        Returns a list of (time, note, string, fret) tuples
+    def detect_pitches(self, audio_data, sample_rate, fmin=80, fmax=1000):
         """
-        # Use librosa's pitch tracking on the numpy array
-        pitches, magnitudes = librosa.piptrack(y=audio_data.astype(float), sr=sample_rate)
+        Detect pitches in the audio data using librosa's pyin algorithm.
         
-        # Extract the strongest pitches over time
-        times = librosa.times_like(pitches)
-        detected_notes = []
-        
-        # Process each frame
-        for t, time in enumerate(times):
-            # Only process frames every 0.1 seconds to avoid excessive notes
-            if t % int(sample_rate/1024/10) != 0:
-                continue
-                
-            index = magnitudes[:, t].argmax()
-            pitch = pitches[index, t]
+        Args:
+            audio_data: Audio time series
+            sample_rate: Sampling rate
+            fmin: Minimum frequency to detect (Hz)
+            fmax: Maximum frequency to detect (Hz)
             
-            # Only proceed if the pitch is strong enough and in our frequency range
-            if pitch > 0 and self.min_freq <= pitch <= self.max_freq:
-                # Map to the closest guitar note
-                note, string, fret = self._map_to_guitar_note(pitch)
-                if note:
-                    detected_notes.append((time, note, string, fret))
-        
-        return detected_notes
-    
-    def _map_to_guitar_note(self, frequency):
+        Returns:
+            Tuple of (frequencies, times, confidences)
         """
-        Map a frequency to the closest guitar note, string, and fret
+        print("Detecting pitches...")
         
-        Returns a tuple of (note_name, string_number, fret_number)
+        # Use pyin for pitch detection (probabilistic YIN)
+        f0, voiced_flag, voiced_probs = librosa.pyin(
+            audio_data,
+            fmin=fmin,
+            fmax=fmax,
+            sr=sample_rate,
+            hop_length=self.hop_length,
+            frame_length=self.frame_length
+        )
+        
+        # Calculate time for each frame
+        times = librosa.frames_to_time(
+            np.arange(len(f0)),
+            sr=sample_rate,
+            hop_length=self.hop_length
+        )
+        
+        print(f"Detected {len(f0)} pitch frames")
+        return f0, times, voiced_probs
+        
+    def frequency_to_note(self, frequency):
         """
-        # Find the closest note by frequency
-        closest_note = None
-        min_distance = float('inf')
+        Convert a frequency to the nearest note name and octave.
         
-        for note, note_freq in self.note_frequencies.items():
-            distance = abs(frequency - note_freq)
-            if distance < min_distance:
-                min_distance = distance
-                closest_note = note
-        
-        if not closest_note:
+        Args:
+            frequency: Frequency in Hz
+            
+        Returns:
+            Tuple of (note_name, octave, cents_off)
+        """
+        if frequency is None or np.isnan(frequency) or frequency <= 0:
             return None, None, None
-        
-        # Map the note to a guitar string and fret
-        # We try to find the most ergonomic position on the fretboard
-        
-        # Standard guitar tuning
-        strings = ['E4', 'B3', 'G3', 'D3', 'A2', 'E2']
-        string_num = None
-        fret_num = None
-        
-        # Find which string and fret produces this note
-        note_name = closest_note[:-1]  # Remove octave number
-        note_octave = int(closest_note[-1])
-        
-        for i, string in enumerate(strings):
-            string_name = string[:-1]  # Remove octave number
-            string_octave = int(string[-1])
             
-            # Find the semitone difference between the string and note
-            note_index = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].index(note_name)
-            string_index = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'].index(string_name)
-            
-            octave_diff = note_octave - string_octave
-            semitones = octave_diff * 12 + (note_index - string_index)
-            
-            # If the note can be played on this string (within 15 frets)
-            if 0 <= semitones <= 15:
-                string_num = i + 1  # 1-indexed string number
-                fret_num = semitones
-                break
+        # A4 = 440 Hz is our reference
+        a4_freq = 440.0
+        a4_midi = 69
         
-        # If we couldn't find a suitable string and fret, just return the note
-        if string_num is None:
-            return closest_note, None, None
+        # Calculate MIDI note number
+        midi_note = 12 * np.log2(frequency / a4_freq) + a4_midi
+        midi_note_rounded = int(round(midi_note))
+        
+        # Calculate cents off from the nearest note
+        cents_off = 100 * (midi_note - midi_note_rounded)
+        
+        # Get note name and octave
+        note_index = midi_note_rounded % 12
+        octave = (midi_note_rounded // 12) - 1
+        note_name = self.NOTE_NAMES[note_index]
+        
+        return note_name, octave, cents_off
+        
+    def find_string_and_fret(self, frequency):
+        """
+        Find the best guitar string and fret for a given frequency.
+        
+        Args:
+            frequency: Frequency in Hz
             
-        return closest_note, string_num, fret_num
+        Returns:
+            Tuple of (string_number, fret_number, string_name)
+            String numbers: 1=high E, 6=low E
+        """
+        if frequency is None or np.isnan(frequency) or frequency <= 0:
+            return None, None, None
+            
+        # Calculate MIDI note number
+        a4_freq = 440.0
+        a4_midi = 69
+        target_midi = 12 * np.log2(frequency / a4_freq) + a4_midi
+        
+        # Define string tunings with MIDI numbers
+        strings = [
+            (6, 'E2', 40),  # Low E
+            (5, 'A2', 45),  # A
+            (4, 'D3', 50),  # D
+            (3, 'G3', 55),  # G
+            (2, 'B3', 59),  # B
+            (1, 'E4', 64),  # High E
+        ]
+        
+        best_match = None
+        min_fret = 100
+        
+        # Try each string
+        for string_num, string_name, open_string_midi in strings:
+            fret = round(target_midi - open_string_midi)
+            
+            # Only consider valid fret positions (0-24)
+            if 0 <= fret <= 24:
+                # Prefer lower frets and higher strings
+                if fret < min_fret or (fret == min_fret and best_match and string_num < best_match[0]):
+                    min_fret = fret
+                    best_match = (string_num, fret, string_name)
+                    
+        return best_match if best_match else (None, None, None)
+        
+    def analyze_recording(self, filepath, confidence_threshold=0.5):
+        """
+        Analyze a recording and extract guitar notes with timing.
+        
+        Args:
+            filepath: Path to the audio file
+            confidence_threshold: Minimum confidence for including a note
+            
+        Returns:
+            List of detected notes with (time, frequency, note, octave, string, fret)
+        """
+        # Load audio
+        audio_data, sample_rate = self.load_audio(filepath)
+        
+        # Detect pitches
+        frequencies, times, confidences = self.detect_pitches(audio_data, sample_rate)
+        
+        # Process detected pitches
+        notes = []
+        for i, (freq, time, conf) in enumerate(zip(frequencies, times, confidences)):
+            if conf >= confidence_threshold and not np.isnan(freq):
+                note_name, octave, cents = self.frequency_to_note(freq)
+                string_num, fret, string_name = self.find_string_and_fret(freq)
+                
+                notes.append({
+                    'time': time,
+                    'frequency': freq,
+                    'note': note_name,
+                    'octave': octave,
+                    'cents_off': cents,
+                    'string': string_num,
+                    'fret': fret,
+                    'string_name': string_name,
+                    'confidence': conf
+                })
+                
+        print(f"Extracted {len(notes)} notes from recording")
+        return notes

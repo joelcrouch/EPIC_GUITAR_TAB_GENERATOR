@@ -1,95 +1,154 @@
 """
-Tests for the audio recording functionality
+Unit tests for audio recording functionality.
 """
-import os
 import pytest
+import os
 import wave
-import numpy as np
+import time
 from src.record_audio import AudioRecorder
 
+
 class TestAudioRecorder:
-    def setup_method(self):
-        # Create a temporary directory for test recordings
-        self.test_dir = "test_data"
-        if not os.path.exists(self.test_dir):
-            os.makedirs(self.test_dir)
-        
-        # Initialize recorder with test directory
-        self.recorder = AudioRecorder(output_dir=self.test_dir)
+    """Test cases for the AudioRecorder class."""
     
-    def teardown_method(self):
-        # Clean up test files
-        for file in os.listdir(self.test_dir):
-            if file.startswith("recording_") and file.endswith(".wav"):
-                try:
-                    os.remove(os.path.join(self.test_dir, file))
-                except:
-                    pass
+    @pytest.fixture
+    def recorder(self):
+        """Create a recorder instance for testing."""
+        print("\n[TEST SETUP] Creating AudioRecorder instance...")
+        rec = AudioRecorder()
+        yield rec
+        print("[TEST CLEANUP] Cleaning up AudioRecorder...")
+        rec.cleanup()
         
-        # Close the recorder
-        self.recorder.close()
-    
-    def test_initialization(self):
-        """Test that the recorder initializes with correct settings"""
-        assert self.recorder.channels == 1
-        assert self.recorder.sample_rate == 44100
-        assert self.recorder.format is not None
-        assert os.path.exists(self.test_dir)
-    
-    def test_save_wav_empty(self):
-        """Test that _save_wav handles empty frames"""
-        self.recorder.frames = []
-        self.recorder.filename = os.path.join(self.test_dir, "empty_test.wav")
-        # This should not create a file since frames is empty
-        self.recorder._save_wav()
-        assert not os.path.exists(self.recorder.filename)
-    
-    def test_mock_recording(self):
-        """
-        Test recording functionality by creating mock frames and saving them
+    def test_recorder_initialization(self, recorder):
+        """Test that the recorder initializes with correct parameters."""
+        print("[TEST] Testing recorder initialization...")
+        assert recorder.sample_rate == 44100
+        assert recorder.channels == 1
+        assert recorder.chunk_size == 4096
+        assert recorder.is_recording == False
+        assert len(recorder.frames) == 0
+        print("[PASS] Recorder initialized correctly")
         
-        This doesn't actually record audio but tests the file saving mechanism
-        """
-        # Create some mock audio data (1 second of silence)
-        mock_audio = np.zeros(44100, dtype=np.int16)
-        mock_frames = [mock_audio.tobytes()]
+    def test_start_recording(self, recorder):
+        """Test that recording can be started."""
+        print("[TEST] Testing start_recording...")
+        recorder.start_recording()
+        assert recorder.is_recording == True
+        assert recorder.stream is not None
+        print("[PASS] Recording started successfully")
+        recorder.stop_recording()
         
-        # Set up the recorder with mock data
-        self.recorder.frames = mock_frames
-        self.recorder.filename = os.path.join(self.test_dir, "mock_recording.wav")
+    def test_stop_recording(self, recorder):
+        """Test that recording can be stopped."""
+        print("[TEST] Testing stop_recording...")
+        recorder.start_recording()
+        time.sleep(0.1)  # Record for a brief moment
+        recorder.stop_recording()
+        assert recorder.is_recording == False
+        assert recorder.stream is None
+        print("[PASS] Recording stopped successfully")
         
-        # Save the mock recording
-        self.recorder._save_wav()
+    def test_record_and_save(self, recorder, tmp_path):
+        """Test recording audio and saving to a file."""
+        print("[TEST] Testing record_and_save...")
         
-        # Check that the file was created
-        assert os.path.exists(self.recorder.filename)
+        # Start recording
+        print("  Starting recording for 1 second...")
+        recorder.start_recording()
         
-        # Validate the WAV file
-        with wave.open(self.recorder.filename, 'rb') as wf:
-            assert wf.getnchannels() == self.recorder.channels
-            assert wf.getframerate() == self.recorder.sample_rate
-            assert wf.getsampwidth() == 2  # 16-bit audio = 2 bytes per sample
-    
-    def test_get_audio_data(self):
-        """Test converting frames to numpy array"""
-        # Create some mock audio data
-        mock_audio = np.array([1000, 2000, 3000], dtype=np.int16)
-        self.recorder.frames = [mock_audio.tobytes()]
+        # Record for 1 second
+        start_time = time.time()
+        while time.time() - start_time < 1.0:
+            recorder.record_chunk()
+            time.sleep(0.01)
+            
+        # Stop recording
+        print("  Stopping recording...")
+        recorder.stop_recording()
         
-        # Get the audio data as numpy array
-        audio_data = self.recorder.get_audio_data()
+        # Save to temp directory
+        output_file = os.path.join(tmp_path, "test_recording.wav")
+        print(f"  Saving to {output_file}...")
+        saved_path = recorder.save_recording(
+            filename="test_recording.wav",
+            output_dir=str(tmp_path)
+        )
         
-        # Check the conversion
-        assert isinstance(audio_data, np.ndarray)
-        assert audio_data.dtype == np.int16
-        assert len(audio_data) == 3
-        assert np.array_equal(audio_data, mock_audio)
-    
-    def test_get_audio_data_empty(self):
-        """Test getting audio data when no frames are available"""
-        self.recorder.frames = []
-        audio_data = self.recorder.get_audio_data()
-        assert audio_data is None
-#think aobout putting these into a for loop and having some setup function get
-# the filename and cleanup, then just call the for loop, or add a for loop to each 
-#test and test more->or a combination?
+        # Verify file exists
+        assert os.path.exists(saved_path)
+        print(f"  File created: {saved_path}")
+        
+        # Verify it's a valid WAV file
+        print("  Verifying WAV file format...")
+        with wave.open(saved_path, 'rb') as wf:
+            assert wf.getnchannels() == recorder.channels
+            assert wf.getsampwidth() == recorder.audio.get_sample_size(recorder.audio_format)
+            assert wf.getframerate() == recorder.sample_rate
+            num_frames = wf.getnframes()
+            print(f"  WAV file properties:")
+            print(f"    - Channels: {wf.getnchannels()}")
+            print(f"    - Sample width: {wf.getsampwidth()} bytes")
+            print(f"    - Frame rate: {wf.getframerate()} Hz")
+            print(f"    - Number of frames: {num_frames}")
+            
+        # Verify duration is approximately 1 second
+        duration = recorder.get_recording_duration()
+        print(f"  Recording duration: {duration:.2f} seconds")
+        assert 0.9 <= duration <= 1.5  # Allow some tolerance
+        
+        print("[PASS] Recording and saving successful")
+        
+    def test_get_recording_duration(self, recorder):
+        """Test that recording duration is calculated correctly."""
+        print("[TEST] Testing get_recording_duration...")
+        
+        # Initially should be 0
+        assert recorder.get_recording_duration() == 0.0
+        print("  Initial duration: 0.0s")
+        
+        # Record for a short time
+        recorder.start_recording()
+        start_time = time.time()
+        while time.time() - start_time < 0.5:
+            recorder.record_chunk()
+            time.sleep(0.01)
+        recorder.stop_recording()
+        
+        # Check duration
+        duration = recorder.get_recording_duration()
+        print(f"  Recorded duration: {duration:.2f}s")
+        assert 0.4 <= duration <= 0.6  # Should be around 0.5 seconds
+        
+        print("[PASS] Duration calculation correct")
+        
+    def test_multiple_recordings(self, recorder, tmp_path):
+        """Test that multiple recordings can be made sequentially."""
+        print("[TEST] Testing multiple recordings...")
+        
+        for i in range(3):
+            print(f"  Recording #{i+1}...")
+            recorder.start_recording()
+            
+            # Record briefly
+            for _ in range(20):
+                recorder.record_chunk()
+                time.sleep(0.01)
+                
+            recorder.stop_recording()
+            
+            # Save
+            filename = f"recording_{i}.wav"
+            saved_path = recorder.save_recording(
+                filename=filename,
+                output_dir=str(tmp_path)
+            )
+            
+            assert os.path.exists(saved_path)
+            print(f"    Saved: {saved_path}")
+            
+        print("[PASS] Multiple recordings successful")
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "-s"])

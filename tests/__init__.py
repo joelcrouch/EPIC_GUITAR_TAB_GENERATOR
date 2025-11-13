@@ -1,3 +1,3 @@
 """
-Guitar Tab Generator tests package
+Test suite for Guitar Tab Generator
 """
